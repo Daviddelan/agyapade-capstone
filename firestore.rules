@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isGovernmentOfficial() {
+      return hasRole('government');
+    }
+
+    function isFinancialInstitution() {
+      return hasRole('financial');
+    }
+
+    function canViewDocuments() {
+      return isAdmin() || isGovernmentOfficial() || isFinancialInstitution();
+    }
+
+    function canReviewDocuments() {
+      return isAdmin() || isGovernmentOfficial();
+    }
+
+    function canModifyDocument(docData) {
+      return isAdmin() || 
+        (isOwner(docData.userId) && docData.status != 'under_review') ||
+        (isGovernmentOfficial() && (
+          docData.status != 'under_review' ||
+          docData.reviewState.reviewerId == request.auth.uid
+        ));
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if true; // Allow initial user creation
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+      
+      match /verificationStatus/{type} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Documents collection
+    match /documents/{documentId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        canViewDocuments()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        canModifyDocument(resource.data) && (
+          !('reviewState' in request.resource.data) || (
+            resource.data.status == 'under_review' ?
+              request.resource.data.reviewState.reviewerId == request.auth.uid :
+              true
+          )
+        )
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin()
+      );
+    }
+
+    // Activity logs
+    match /activityLogs/{logId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+    }
+
+    // Admin settings
+    match /adminSettings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Registration process
+    match /tempRegistrations/{sessionId} {
+      allow read, write: if true;
+    }
+    
+    match /individualRegistrations/{userId} {
+      allow read, write: if true;
+      
+      match /verificationStatus/{type} {
+        allow read, write: if true;
+      }
+    }
+
+    // Login verifications
+    match /loginVerifications/{docId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+  }
+}
