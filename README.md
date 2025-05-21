@@ -202,6 +202,6 @@ Email: david.nuworkpor@ashesi.edu.gh
 
 ## Acknowledgements
 
-- Dr. Kwabena Bamfo (Supervisor, Ashesi University)
+- Mr. Kwabena Bamfo (Supervisor, Ashesi University)
 - Ashesi Computer Science Faculty
 - Financial and Land Registry Institutions consulted
